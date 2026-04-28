@@ -30,6 +30,7 @@ export default function AdminHeader() {
               width={60}
               height={60}
               className="object-contain"
+              style={{ mixBlendMode: "screen" }}
               priority
             />
             <div>

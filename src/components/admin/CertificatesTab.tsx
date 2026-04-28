@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ADMIN_STRINGS } from "@/lib/adminStrings";
 import {
-  AdminApiError,
   bulkDelete,
   bulkVisibility,
   deleteCertificate,
@@ -34,14 +33,25 @@ function formatDate(iso: string): string {
   return iso.slice(0, 10);
 }
 
+function normalizeDniSearch(raw: string): string {
+  return raw.replace(/\D/g, "");
+}
+
 export default function CertificatesTab() {
   const [semesters, setSemesters] = useState<SemesterResponse[]>([]);
   const [selectedSemester, setSelectedSemester] = useState<string>("");
   const [dniSearch, setDniSearch] = useState("");
   const [visibilityFilter, setVisibilityFilter] = useState<VisibilityFilter>("all");
 
-  const [certificates, setCertificates] = useState<CertificateResponse[]>([]);
+  const [allCertificates, setAllCertificates] = useState<CertificateResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Client-side prefix filter — no backend round-trip for DNI changes.
+  const certificates = useMemo(() => {
+    const prefix = normalizeDniSearch(dniSearch);
+    if (!prefix) return allCertificates;
+    return allCertificates.filter((c) => c.dni.startsWith(prefix));
+  }, [allCertificates, dniSearch]);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
@@ -65,67 +75,53 @@ export default function CertificatesTab() {
     })();
   }, []);
 
-  // Reload certificates whenever filters change.
+  // Reload all certs for the current semester/visibility from the backend.
+  // DNI filtering is done client-side via the `certificates` memo above.
   useEffect(() => {
     if (semesters.length === 0) return;
-    void (async () => {
-      setIsLoading(true);
-      try {
-        const filters: {
-          semester_id?: string;
-          dni?: string;
-          is_visible?: boolean;
-        } = {};
-        if (selectedSemester && selectedSemester !== ALL_SEMESTERS) {
-          filters.semester_id = selectedSemester;
-        }
-        if (dniSearch.trim()) filters.dni = dniSearch.trim();
-        if (visibilityFilter === "visible") filters.is_visible = true;
-        else if (visibilityFilter === "hidden") filters.is_visible = false;
 
-        const list = await listCertificates(filters);
-        setCertificates(list);
-        // Drop selections for rows no longer in view.
-        setSelectedIds((prev) => {
-          const visible = new Set(list.map((c) => c.id));
-          const filtered = new Set<string>();
-          for (const id of prev) if (visible.has(id)) filtered.add(id);
-          return filtered;
-        });
-      } catch (err) {
-        if (err instanceof AdminApiError && err.code === "invalid_dni") {
-          // Inline-friendly: show the search field as invalid via toast.
-          showToast({ kind: "error", message: err.message });
-          setCertificates([]);
-        } else {
+    const handle = setTimeout(() => {
+      void (async () => {
+        setIsLoading(true);
+        try {
+          const filters: { semester_id?: string; is_visible?: boolean } = {};
+          if (selectedSemester && selectedSemester !== ALL_SEMESTERS)
+            filters.semester_id = selectedSemester;
+          if (visibilityFilter === "visible") filters.is_visible = true;
+          else if (visibilityFilter === "hidden") filters.is_visible = false;
+
+          const list = await listCertificates(filters);
+          setAllCertificates(list);
+          // Drop selections for certs no longer in the backend result.
+          setSelectedIds((prev) => {
+            const visible = new Set(list.map((c) => c.id));
+            const filtered = new Set<string>();
+            for (const id of prev) if (visible.has(id)) filtered.add(id);
+            return filtered;
+          });
+        } catch {
           showToast({
             kind: "error",
             message: ADMIN_STRINGS.toastNetworkError,
           });
+        } finally {
+          setIsLoading(false);
         }
-      } finally {
-        setIsLoading(false);
-      }
-    })();
-  }, [semesters.length, selectedSemester, dniSearch, visibilityFilter]);
+      })();
+    }, 500);
+
+    return () => clearTimeout(handle);
+  }, [semesters.length, selectedSemester, visibilityFilter]);
 
   const refreshCertificates = async () => {
-    // Re-trigger the effect by toggling a no-op state — simplest is to
-    // re-run the same logic inline.
-    const filters: {
-      semester_id?: string;
-      dni?: string;
-      is_visible?: boolean;
-    } = {};
-    if (selectedSemester && selectedSemester !== ALL_SEMESTERS) {
+    const filters: { semester_id?: string; is_visible?: boolean } = {};
+    if (selectedSemester && selectedSemester !== ALL_SEMESTERS)
       filters.semester_id = selectedSemester;
-    }
-    if (dniSearch.trim()) filters.dni = dniSearch.trim();
     if (visibilityFilter === "visible") filters.is_visible = true;
     else if (visibilityFilter === "hidden") filters.is_visible = false;
     try {
       const list = await listCertificates(filters);
-      setCertificates(list);
+      setAllCertificates(list);
     } catch {
       showToast({ kind: "error", message: ADMIN_STRINGS.toastNetworkError });
     }
@@ -164,13 +160,13 @@ export default function CertificatesTab() {
     next: boolean,
   ) => {
     const prev = cert.is_visible;
-    setCertificates((list) =>
+    setAllCertificates((list) =>
       list.map((c) => (c.id === cert.id ? { ...c, is_visible: next } : c)),
     );
     try {
       await patchCertificate(cert.id, { is_visible: next });
     } catch {
-      setCertificates((list) =>
+      setAllCertificates((list) =>
         list.map((c) => (c.id === cert.id ? { ...c, is_visible: prev } : c)),
       );
       showToast({

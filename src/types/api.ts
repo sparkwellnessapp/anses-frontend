@@ -62,6 +62,7 @@ export interface CertificateResponse {
   is_visible: boolean;
   file_size: number;
   created_at: string;
+  updated_at: string; // ISO-8601; bumped by DB trigger on every UPDATE
 }
 
 export interface CertificateUpdate {

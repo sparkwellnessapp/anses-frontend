@@ -44,6 +44,7 @@ export default function AdminLoginPage() {
             width={36}
             height={36}
             className="object-contain"
+            style={{ mixBlendMode: "screen" }}
             priority
           />
           <div>

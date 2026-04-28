@@ -53,7 +53,7 @@ const dictionary = {
     pageSubtitle: "Download your certificate by DNI number",
 
     inputLabel: "DNI number",
-    inputPlaceholder: "E.g. 12345678 or 12.345.678",
+    inputPlaceholder: "E.g. 12345678",
     inputHint: "Enter your DNI in any format.",
     inputNormalizedPrefix: "Searching as:",
 

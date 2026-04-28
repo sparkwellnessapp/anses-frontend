@@ -84,6 +84,7 @@ export const ADMIN_STRINGS = {
   certificatesAllSemesters: "Todos los semestres",
   certificatesDniSearchLabel: "Buscar por DNI",
   certificatesDniSearchPlaceholder: "Ingresa un DNI",
+  dniSearchHint: "Ingresá 7 u 8 dígitos.",
   certificatesVisibilityFilter: "Visibilidad",
   certificatesVisibilityAll: "Todos",
   certificatesVisibilityVisible: "Visibles",

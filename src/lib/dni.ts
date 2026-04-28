@@ -14,7 +14,6 @@ const DIGITS_RE = /\D+/g;
 export function normalizeDni(raw: string): string | null {
   const digits = raw.replace(DIGITS_RE, "");
   if (!digits) return null;
-  if (digits.length === 7) return "0" + digits;
-  if (digits.length === 8) return digits;
+  if (digits.length >= 5 && digits.length <= 8) return digits.padStart(8, "0");
   return null;
 }
