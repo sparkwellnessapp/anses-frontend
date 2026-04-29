@@ -25,9 +25,13 @@ import type {
   ImportJobResponse,
   ImportTriggerRequest,
   LoginRequest,
+  SealResponse,
   SemesterCreate,
   SemesterResponse,
   SemesterUpdate,
+  SignJobPreviewResponse,
+  SignJobResponse,
+  SignatureResponse,
   TokenResponse,
 } from "@/types/api";
 import { getToken } from "./auth";
@@ -53,7 +57,7 @@ export class AdminApiError extends Error {
 // ---------- Internal request helper ----------
 
 interface RequestOptions {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PATCH" | "DELETE" | "PUT";
   body?: unknown;
   /** When true, sends FormData (multipart) and skips JSON content-type. */
   formData?: FormData;
@@ -253,5 +257,66 @@ export function getCertificateDownload(
 ): Promise<AdminDownloadResponse> {
   return request<AdminDownloadResponse>(
     `/api/admin/certificates/${id}/download`,
+  );
+}
+
+// ---------- Signatures ----------
+
+export function listSignatures(): Promise<SignatureResponse[]> {
+  return request<SignatureResponse[]>("/api/admin/signatures");
+}
+
+export function uploadSignature(formData: FormData): Promise<SignatureResponse> {
+  return request<SignatureResponse>("/api/admin/signatures", {
+    method: "POST",
+    formData,
+  });
+}
+
+export function deleteSignature(id: string): Promise<void> {
+  return request<void>(`/api/admin/signatures/${id}`, { method: "DELETE" });
+}
+
+// ---------- Seal ----------
+
+export function getSeal(): Promise<SealResponse> {
+  return request<SealResponse>("/api/admin/seal");
+}
+
+export function replaceSeal(formData: FormData): Promise<SealResponse> {
+  return request<SealResponse>("/api/admin/seal", { method: "PUT", formData });
+}
+
+// ---------- Sign jobs ----------
+
+export function previewSignJob(
+  semesterId: string,
+  formData: FormData,
+): Promise<SignJobPreviewResponse> {
+  return request<SignJobPreviewResponse>(
+    `/api/admin/semesters/${semesterId}/sign/preview`,
+    { method: "POST", formData },
+  );
+}
+
+export function submitSignJob(
+  semesterId: string,
+  formData: FormData,
+): Promise<SignJobResponse> {
+  return request<SignJobResponse>(
+    `/api/admin/semesters/${semesterId}/sign`,
+    { method: "POST", formData },
+  );
+}
+
+export function getSignJob(jobId: string): Promise<SignJobResponse> {
+  return request<SignJobResponse>(`/api/admin/sign-jobs/${jobId}`);
+}
+
+export function listSignJobsForSemester(
+  semesterId: string,
+): Promise<SignJobResponse[]> {
+  return request<SignJobResponse[]>(
+    `/api/admin/semesters/${semesterId}/sign-jobs`,
   );
 }

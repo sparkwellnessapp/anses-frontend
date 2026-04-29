@@ -11,6 +11,7 @@ import {
 import type { SemesterResponse, SemesterStatus } from "@/types/api";
 import NewSemesterModal from "./NewSemesterModal";
 import ImportModal from "./ImportModal";
+import SignModal from "./SignModal";
 import ConfirmDialog from "./ConfirmDialog";
 import { showToast } from "./ToastContainer";
 
@@ -31,6 +32,7 @@ export default function SemestersTab() {
   const [isLoading, setIsLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
   const [importTarget, setImportTarget] = useState<SemesterResponse | null>(null);
+  const [signTarget, setSignTarget] = useState<SemesterResponse | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SemesterResponse | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -190,6 +192,14 @@ export default function SemestersTab() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => setSignTarget(sem)}
+                        disabled={sem.status === "deleted"}
+                        className="text-xs px-2.5 py-1 rounded border border-[#2c4264] text-[#2c4264] hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {ADMIN_STRINGS.semesterActionSign}
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setDeleteTarget(sem)}
                         disabled={sem.status === "deleted"}
                         className="text-xs px-2.5 py-1 rounded border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -215,6 +225,12 @@ export default function SemestersTab() {
         semester={importTarget}
         isOpen={importTarget !== null}
         onClose={() => setImportTarget(null)}
+        onCompleted={() => void refresh()}
+      />
+      <SignModal
+        semester={signTarget}
+        isOpen={signTarget !== null}
+        onClose={() => setSignTarget(null)}
         onCompleted={() => void refresh()}
       />
       <ConfirmDialog

@@ -2,7 +2,7 @@
 
 import { ADMIN_STRINGS } from "@/lib/adminStrings";
 
-export type AdminTab = "semesters" | "certificates";
+export type AdminTab = "semesters" | "certificates" | "signatures";
 
 interface TabNavProps {
   active: AdminTab;
@@ -20,6 +20,7 @@ export default function TabNav({ active, onChange }: TabNavProps) {
   const tabs: Array<{ key: AdminTab; label: string }> = [
     { key: "semesters", label: ADMIN_STRINGS.tabSemesters },
     { key: "certificates", label: ADMIN_STRINGS.tabCertificates },
+    { key: "signatures", label: ADMIN_STRINGS.tabSignatures },
   ];
 
   return (

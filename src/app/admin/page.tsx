@@ -6,6 +6,7 @@ import AdminHeader from "@/components/admin/AdminHeader";
 import TabNav, { type AdminTab } from "@/components/admin/TabNav";
 import SemestersTab from "@/components/admin/SemestersTab";
 import CertificatesTab from "@/components/admin/CertificatesTab";
+import SignaturesTab from "@/components/admin/SignaturesTab";
 
 /**
  * Admin shell. Owns the tab state, persisting it in the URL via
@@ -20,8 +21,13 @@ export default function AdminPage() {
   const router = useRouter();
   const params = useSearchParams();
 
+  const rawTab = params.get("tab");
   const initial: AdminTab =
-    params.get("tab") === "certificates" ? "certificates" : "semesters";
+    rawTab === "certificates"
+      ? "certificates"
+      : rawTab === "signatures"
+        ? "signatures"
+        : "semesters";
 
   const [tab, setTab] = useState<AdminTab>(initial);
 
@@ -44,6 +50,7 @@ export default function AdminPage() {
 
         {tab === "semesters" && <SemestersTab />}
         {tab === "certificates" && <CertificatesTab />}
+        {tab === "signatures" && <SignaturesTab />}
       </main>
     </div>
   );

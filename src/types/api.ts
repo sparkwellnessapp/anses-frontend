@@ -51,7 +51,7 @@ export interface SemesterUpdate {
 
 // ---------- Certificates ----------
 
-export type CertificateSource = "import" | "manual";
+export type CertificateSource = "import" | "manual" | "signed";
 
 export interface CertificateResponse {
   id: string;
@@ -117,6 +117,62 @@ export interface ImportJobResponse {
 export interface ImportTriggerRequest {
   drive_folder_id: string;
   mode: ImportJobMode;
+}
+
+// ---------- Signature assets ----------
+
+export interface SignatureResponse {
+  id: string;
+  name: string;
+  gcs_path: string;
+  preview_url: string;
+  preview_expires_at: string;
+  created_at: string;
+}
+
+export interface SealResponse {
+  gcs_path: string;
+  preview_url: string;
+  preview_expires_at: string;
+  updated_at: string;
+}
+
+// ---------- Sign jobs ----------
+
+export type SignJobStatus = "pending" | "running" | "completed" | "failed";
+export type SignJobMode = "override" | "append" | "skip_existing";
+
+export interface RotationEntry {
+  signature_id: string;
+  signature_name: string;
+  count: number;
+}
+
+export interface SignJobPreviewResponse {
+  file_count: number;
+  rotation_breakdown: RotationEntry[];
+  drive_folder_name: string;
+  drive_folder_valid: boolean;
+  drive_folder_writable: boolean;
+  collision_count: number;
+  collisions: string[];
+  mode_action_summary: string;
+}
+
+export interface SignJobResponse {
+  id: string;
+  semester_id: string;
+  drive_folder_id: string;
+  signature_ids: string[];
+  mode: SignJobMode;
+  status: SignJobStatus;
+  total_files: number;
+  signed_count: number;
+  skipped_count: number;
+  error_count: number;
+  error_details: Array<Record<string, unknown>> | null;
+  started_at: string;
+  completed_at: string | null;
 }
 
 // ---------- Existing public types (kept) ----------
