@@ -42,6 +42,10 @@ export interface SemesterCreate {
   drive_folder_id?: string | null;
 }
 
+export interface SemesterDeleteResponse {
+  promoted_semester_id: string | null;
+}
+
 export interface SemesterUpdate {
   label?: string;
   status?: SemesterStatus;
@@ -51,7 +55,7 @@ export interface SemesterUpdate {
 
 // ---------- Certificates ----------
 
-export type CertificateSource = "import" | "manual" | "signed";
+export type CertificateSource = "import" | "manual" | "signed" | "caja_unsigned";
 
 export interface CertificateResponse {
   id: string;
@@ -140,7 +144,6 @@ export interface SealResponse {
 // ---------- Sign jobs ----------
 
 export type SignJobStatus = "pending" | "running" | "completed" | "failed";
-export type SignJobMode = "override" | "append" | "skip_existing";
 
 export interface RotationEntry {
   signature_id: string;
@@ -154,17 +157,25 @@ export interface SignJobPreviewResponse {
   drive_folder_name: string;
   drive_folder_valid: boolean;
   drive_folder_writable: boolean;
-  collision_count: number;
-  collisions: string[];
-  mode_action_summary: string;
+}
+
+export interface CajaSignPreviewResponse {
+  file_count: number;
+  rotation_breakdown: RotationEntry[];
+}
+
+export interface PublishPreviewResponse {
+  file_count: number;
+  drive_folder_name: string;
+  drive_folder_valid: boolean;
+  drive_folder_writable: boolean;
 }
 
 export interface SignJobResponse {
   id: string;
   semester_id: string;
   drive_folder_id: string;
-  signature_ids: string[];
-  mode: SignJobMode;
+  signature_ids: string[] | null;
   status: SignJobStatus;
   total_files: number;
   signed_count: number;
@@ -173,14 +184,17 @@ export interface SignJobResponse {
   error_details: Array<Record<string, unknown>> | null;
   started_at: string;
   completed_at: string | null;
+  output_zip_url: string | null;
 }
 
 // ---------- Existing public types (kept) ----------
 
 export interface PublicCertificateResult {
+  id: string;
   semester_id: string;
   semester_label: string;
   dni: string;
+  document_type: "anses" | "caja";
   download_url: string;
   expires_at: string;
 }

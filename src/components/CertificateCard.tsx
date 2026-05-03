@@ -27,7 +27,7 @@ export default function CertificateCard({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">
-            {result.semester_label}
+            {result.document_type === "anses" ? "ANSES" : "Caja"}
           </h3>
           <p className="mt-1 text-sm text-gray-500">
             DNI:{" "}

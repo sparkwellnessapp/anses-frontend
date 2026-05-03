@@ -269,17 +269,12 @@ export default function ImportModal({
           </div>
 
           {/* Counters */}
-          <div className="grid grid-cols-4 gap-2 text-center">
+          <div className="grid grid-cols-3 gap-2 text-center">
             <Counter label={ADMIN_STRINGS.importTotalFiles} value={job.total_files} />
             <Counter
               label={ADMIN_STRINGS.importImported}
               value={job.imported_count}
               tone="green"
-            />
-            <Counter
-              label={ADMIN_STRINGS.importSkipped}
-              value={job.skipped_count}
-              tone="gray"
             />
             <Counter
               label={ADMIN_STRINGS.importErrors}

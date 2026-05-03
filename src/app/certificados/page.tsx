@@ -112,6 +112,9 @@ export default function CertificadosPage() {
           <p className="mt-3 text-base md:text-lg text-gray-600">
             {t(locale, "pageSubtitle")}
           </p>
+          <p className="mt-2 text-sm text-gray-500">
+            {t(locale, "pageExpiryNotice")}
+          </p>
         </div>
 
         {/* Lookup form — always rendered. Disabled while loading. */}
@@ -138,7 +141,7 @@ export default function CertificadosPage() {
               </h3>
               {status.results.map((r) => (
                 <CertificateCard
-                  key={`${r.semester_id}-${r.dni}`}
+                  key={r.id}
                   locale={locale}
                   result={r}
                 />

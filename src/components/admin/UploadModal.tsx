@@ -7,53 +7,79 @@ import {
   AdminApiError,
   getSignJob,
   listSignatures,
+  previewCajaSignJob,
+  previewPublishJob,
   previewSignJob,
+  submitCajaSignJob,
+  submitPublishJob,
   submitSignJob,
 } from "@/lib/adminApi";
 import { showToast } from "./ToastContainer";
 import type {
-  SignJobMode,
+  CajaSignPreviewResponse,
+  PublishPreviewResponse,
+  SemesterResponse,
   SignJobPreviewResponse,
   SignJobResponse,
   SignatureResponse,
-  SemesterResponse,
 } from "@/types/api";
 
-interface SignModalProps {
+type RotationBreakdownEntry = {
+  signature_id: string;
+  signature_name?: string | null;
+  count: number;
+};
+
+type UploadPath = "anses_sign" | "caja_publish" | "caja_local_sign";
+type Phase = "choose" | "form" | "preview" | "progress";
+
+const POLL_INTERVAL_MS = 2000;
+
+const PATH_INFO: Record<UploadPath, { label: string; desc: string }> = {
+  anses_sign: {
+    label: ADMIN_STRINGS.uploadPathAnsesSign,
+    desc: ADMIN_STRINGS.uploadPathAnsesSignDesc,
+  },
+  caja_publish: {
+    label: ADMIN_STRINGS.uploadPathCajaPublish,
+    desc: ADMIN_STRINGS.uploadPathCajaPublishDesc,
+  },
+  caja_local_sign: {
+    label: ADMIN_STRINGS.uploadPathCajaLocal,
+    desc: ADMIN_STRINGS.uploadPathCajaLocalDesc,
+  },
+};
+
+interface UploadModalProps {
   semester: SemesterResponse | null;
   isOpen: boolean;
   onClose: () => void;
   onCompleted?: () => void;
 }
 
-type Phase = "form" | "preview" | "progress";
+type AnyPreview =
+  | SignJobPreviewResponse
+  | PublishPreviewResponse
+  | CajaSignPreviewResponse;
 
-const POLL_INTERVAL_MS = 2000;
-
-/**
- * Three-phase sign modal:
- *   form     → file picker, folder, signature selection, mode
- *   preview  → summary card (no DB writes), confirm/back
- *   progress → polling until job reaches terminal state
- */
-export default function SignModal({
+export default function UploadModal({
   semester,
   isOpen,
   onClose,
   onCompleted,
-}: SignModalProps) {
-  const [phase, setPhase] = useState<Phase>("form");
+}: UploadModalProps) {
+  const [phase, setPhase] = useState<Phase>("choose");
+  const [path, setPath] = useState<UploadPath>("anses_sign");
 
   // Form state
   const [files, setFiles] = useState<File[]>([]);
   const [driveFolderId, setDriveFolderId] = useState("");
   const [signatures, setSignatures] = useState<SignatureResponse[]>([]);
   const [selectedSigIds, setSelectedSigIds] = useState<Set<string>>(new Set());
-  const [mode, setMode] = useState<SignJobMode>("skip_existing");
   const [sigsLoading, setSigsLoading] = useState(false);
 
   // Preview state
-  const [preview, setPreview] = useState<SignJobPreviewResponse | null>(null);
+  const [preview, setPreview] = useState<AnyPreview | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
 
   // Progress state
@@ -63,26 +89,28 @@ export default function SignModal({
   const completedNotifiedRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load signatures when modal opens.
+  // Load signatures when entering the form phase for paths that need them.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || phase !== "form" || path === "caja_publish") return;
     setSigsLoading(true);
     listSignatures()
       .then((sigs) => {
         setSignatures(sigs);
         setSelectedSigIds(new Set(sigs.map((s) => s.id)));
       })
-      .catch(() => {
-        showToast({ kind: "error", message: ADMIN_STRINGS.toastNetworkError });
-      })
+      .catch(() =>
+        showToast({ kind: "error", message: ADMIN_STRINGS.toastNetworkError }),
+      )
       .finally(() => setSigsLoading(false));
-  }, [isOpen]);
+  }, [isOpen, phase, path]);
 
   // Reset all state on close.
   useEffect(() => {
     if (!isOpen) {
-      setPhase("form");
+      setPhase("choose");
+      setPath("anses_sign");
       setFiles([]);
+      setDriveFolderId("");
       setPreview(null);
       setJob(null);
       setIsSubmitting(false);
@@ -115,18 +143,20 @@ export default function SignModal({
 
   // ── helpers ──
 
+  const needsDrive = path !== "caja_local_sign";
+  const needsSigs = path !== "caja_publish";
+
   const buildFormData = () => {
     const fd = new FormData();
     files.forEach((f) => fd.append("files", f));
-    fd.append("drive_folder_id", driveFolderId.trim());
-    fd.append("signature_ids", JSON.stringify([...selectedSigIds]));
-    fd.append("mode", mode);
+    if (needsDrive) fd.append("drive_folder_id", driveFolderId.trim());
+    if (needsSigs)
+      fd.append("signature_ids", JSON.stringify([...selectedSigIds]));
     return fd;
   };
 
-  const removeFile = (index: number) => {
+  const removeFile = (index: number) =>
     setFiles((prev) => prev.filter((_, i) => i !== index));
-  };
 
   const toggleSig = (id: string) => {
     setSelectedSigIds((prev) => {
@@ -139,15 +169,20 @@ export default function SignModal({
 
   const canPreview =
     files.length > 0 &&
-    driveFolderId.trim().length > 0 &&
-    selectedSigIds.size > 0;
+    (!needsDrive || driveFolderId.trim().length > 0) &&
+    (!needsSigs || selectedSigIds.size > 0);
 
   // ── phase handlers ──
 
   const handlePreview = async () => {
     setIsPreviewing(true);
     try {
-      const result = await previewSignJob(semester.id, buildFormData());
+      const fd = buildFormData();
+      let result: AnyPreview;
+      if (path === "anses_sign") result = await previewSignJob(semester.id, fd);
+      else if (path === "caja_publish")
+        result = await previewPublishJob(semester.id, fd);
+      else result = await previewCajaSignJob(semester.id, fd);
       setPreview(result);
       setPhase("preview");
     } catch (err) {
@@ -164,7 +199,12 @@ export default function SignModal({
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      const created = await submitSignJob(semester.id, buildFormData());
+      const fd = buildFormData();
+      let created: SignJobResponse;
+      if (path === "anses_sign") created = await submitSignJob(semester.id, fd);
+      else if (path === "caja_publish")
+        created = await submitPublishJob(semester.id, fd);
+      else created = await submitCajaSignJob(semester.id, fd);
       setJob(created);
       setPhase("progress");
     } catch (err) {
@@ -189,13 +229,92 @@ export default function SignModal({
       ? Math.min(100, Math.round((processed / job.total_files) * 100))
       : 0;
 
+  // Type-narrowed preview accessors.
+  const previewWithDrive =
+    preview && needsDrive
+      ? (preview as SignJobPreviewResponse | PublishPreviewResponse)
+      : null;
+  const previewWithRotation =
+  preview && needsSigs
+    ? (preview as {
+        rotation_breakdown: RotationBreakdownEntry[];
+      })
+    : null;
+
+  const canConfirm =
+    preview !== null &&
+    preview.file_count > 0 &&
+    (previewWithDrive === null ||
+      (previewWithDrive.drive_folder_valid &&
+        previewWithDrive.drive_folder_writable));
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`${ADMIN_STRINGS.signModalTitle} — ${semester.id}`}
-      dismissOnBackdrop={phase === "form" || (phase === "progress" && isTerminal)}
+      title={`${ADMIN_STRINGS.uploadModalTitle} — ${semester.id}`}
+      dismissOnBackdrop={
+        phase === "choose" ||
+        phase === "form" ||
+        (phase === "progress" && isTerminal)
+      }
     >
+      {/* ═══ PHASE 0: Choose path ═══ */}
+      {phase === "choose" && (
+        <div className="space-y-4">
+          <p className="text-sm font-medium text-gray-700">
+            {ADMIN_STRINGS.uploadPathLabel}
+          </p>
+          <div className="space-y-2">
+            {(
+              ["anses_sign", "caja_publish", "caja_local_sign"] as UploadPath[]
+            ).map((p) => (
+              <label
+                key={p}
+                className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                  path === p
+                    ? "border-[#2c4264] bg-blue-50"
+                    : "border-gray-200 hover:border-gray-300"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="upload-path"
+                  value={p}
+                  checked={path === p}
+                  onChange={() => setPath(p)}
+                  className="mt-1"
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">
+                    {PATH_INFO[p].label}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {PATH_INFO[p].desc}
+                  </p>
+                </div>
+              </label>
+            ))}
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-md border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              {ADMIN_STRINGS.cancelButton}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPhase("form")}
+              className="px-4 py-2 rounded-md bg-[#2c4264] text-sm font-medium text-white hover:bg-[#243652] transition-colors"
+            >
+              {ADMIN_STRINGS.uploadPathNextButton}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ═══ PHASE 1: Form ═══ */}
       {phase === "form" && (
         <div className="space-y-4">
@@ -213,10 +332,11 @@ export default function SignModal({
                 const incoming = Array.from(e.target.files ?? []);
                 setFiles((prev) => {
                   const existingNames = new Set(prev.map((f) => f.name));
-                  const toAdd = incoming.filter((f) => !existingNames.has(f.name));
-                  return [...prev, ...toAdd];
+                  return [
+                    ...prev,
+                    ...incoming.filter((f) => !existingNames.has(f.name)),
+                  ];
                 });
-                // Reset so the same file can be re-selected after removal.
                 e.target.value = "";
               }}
               className="block w-full text-sm text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border file:border-gray-300 file:text-sm file:bg-gray-50 hover:file:bg-gray-100"
@@ -225,7 +345,7 @@ export default function SignModal({
               <div className="mt-2">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs text-gray-500">
-                    {files.length} archivo(s) seleccionado(s)
+                    {files.length} archivo(s)
                   </span>
                   <button
                     type="button"
@@ -237,7 +357,10 @@ export default function SignModal({
                 </div>
                 <div className="max-h-36 overflow-y-auto rounded border border-gray-200 bg-gray-50 divide-y divide-gray-100">
                   {files.map((f, i) => (
-                    <div key={i} className="flex items-center justify-between px-3 py-1">
+                    <div
+                      key={i}
+                      className="flex items-center justify-between px-3 py-1"
+                    >
                       <span className="text-xs font-mono text-gray-700 truncate pr-2">
                         {f.name}
                       </span>
@@ -256,95 +379,65 @@ export default function SignModal({
             )}
           </div>
 
-          {/* Drive folder */}
-          <div>
-            <label
-              htmlFor="sign-drive"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              {ADMIN_STRINGS.signDriveFolderLabel}
-            </label>
-            <input
-              id="sign-drive"
-              type="text"
-              value={driveFolderId}
-              onChange={(e) => setDriveFolderId(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2c4264]"
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              Ingrese el ID de la <span className="font-medium">carpeta padre</span> (ej. «I SEMESTRE 2026»), no el de las subcarpetas por rango.
-            </p>
-          </div>
-
-          {/* Signatures */}
-          <div>
-            <p className="block text-sm font-medium text-gray-700 mb-2">
-              {ADMIN_STRINGS.signSignaturesLabel}
-            </p>
-            {sigsLoading ? (
-              <div className="h-10 bg-gray-100 rounded animate-pulse" />
-            ) : signatures.length === 0 ? (
-              <p className="text-sm text-gray-500">
-                {ADMIN_STRINGS.signNoSignaturesAvailable}
-              </p>
-            ) : (
-              <div className="space-y-1 max-h-40 overflow-y-auto rounded border border-gray-200 p-2">
-                {signatures.map((sig) => (
-                  <label
-                    key={sig.id}
-                    className="flex items-center gap-2 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedSigIds.has(sig.id)}
-                      onChange={() => toggleSig(sig.id)}
-                      className="h-4 w-4 rounded text-[#2c4264] focus:ring-[#2c4264]"
-                    />
-                    <span className="text-sm text-gray-800">{sig.name}</span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Mode */}
-          <div>
-            <p className="block text-sm font-medium text-gray-700 mb-2">
-              {ADMIN_STRINGS.signModeLabel}
-            </p>
-            <div className="space-y-2">
-              {(
-                [
-                  ["skip_existing", ADMIN_STRINGS.signModeSkipExisting, ADMIN_STRINGS.signModeSkipExistingHint],
-                  ["override", ADMIN_STRINGS.signModeOverride, ADMIN_STRINGS.signModeOverrideHint],
-                  ["append", ADMIN_STRINGS.signModeAppend, ADMIN_STRINGS.signModeAppendHint],
-                ] as const
-              ).map(([value, label, hint]) => (
-                <label key={value} className="flex items-start gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="sign-mode"
-                    value={value}
-                    checked={mode === value}
-                    onChange={() => setMode(value)}
-                    className="mt-1"
-                  />
-                  <div>
-                    <span className="text-sm font-medium text-gray-900">{label}</span>
-                    <p className="text-xs text-gray-500">{hint}</p>
-                  </div>
-                </label>
-              ))}
+          {/* Drive folder (anses_sign and caja_publish only) */}
+          {needsDrive && (
+            <div>
+              <label
+                htmlFor="upload-drive"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                {ADMIN_STRINGS.signDriveFolderLabel}
+              </label>
+              <input
+                id="upload-drive"
+                type="text"
+                value={driveFolderId}
+                onChange={(e) => setDriveFolderId(e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2c4264]"
+              />
             </div>
-          </div>
+          )}
+
+          {/* Signatures (anses_sign and caja_local_sign only) */}
+          {needsSigs && (
+            <div>
+              <p className="block text-sm font-medium text-gray-700 mb-2">
+                {ADMIN_STRINGS.signSignaturesLabel}
+              </p>
+              {sigsLoading ? (
+                <div className="h-10 bg-gray-100 rounded animate-pulse" />
+              ) : signatures.length === 0 ? (
+                <p className="text-sm text-gray-500">
+                  {ADMIN_STRINGS.signNoSignaturesAvailable}
+                </p>
+              ) : (
+                <div className="space-y-1 max-h-40 overflow-y-auto rounded border border-gray-200 p-2">
+                  {signatures.map((sig) => (
+                    <label
+                      key={sig.id}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedSigIds.has(sig.id)}
+                        onChange={() => toggleSig(sig.id)}
+                        className="h-4 w-4 rounded text-[#2c4264] focus:ring-[#2c4264]"
+                      />
+                      <span className="text-sm text-gray-800">{sig.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-2">
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => setPhase("choose")}
               className="px-4 py-2 rounded-md border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
             >
-              {ADMIN_STRINGS.cancelButton}
+              {ADMIN_STRINGS.signBackButton}
             </button>
             <button
               type="button"
@@ -363,96 +456,55 @@ export default function SignModal({
       {/* ═══ PHASE 2: Preview ═══ */}
       {phase === "preview" && preview && (
         <div className="space-y-4">
-          {/* Header stats */}
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <InfoRow
-              label={ADMIN_STRINGS.signPreviewFiles(preview.file_count)}
-              value={String(preview.file_count)}
-            />
-            <InfoRow
-              label={ADMIN_STRINGS.signPreviewCollisions(preview.collision_count)}
-              value={String(preview.collision_count)}
-              tone={preview.collision_count > 0 ? "amber" : "green"}
-            />
+          <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+            <span className="font-medium text-gray-700">Archivos válidos: </span>
+            <span className="font-mono text-gray-900">{preview.file_count}</span>
           </div>
 
-          {/* Drive folder */}
-          <div className="rounded-md border border-gray-200 p-3 text-sm">
-            <span className="font-medium text-gray-700">
-              {ADMIN_STRINGS.signPreviewFolder}:{" "}
-            </span>
-            {preview.drive_folder_valid ? (
-              <>
-                <span className="text-gray-900">{preview.drive_folder_name || driveFolderId}</span>
-                {!preview.drive_folder_writable && (
-                  <span className="ml-2 text-xs text-red-600">
-                    ({ADMIN_STRINGS.signPreviewFolderNotWritable})
+          {previewWithDrive && (
+            <div className="rounded-md border border-gray-200 p-3 text-sm">
+              <span className="font-medium text-gray-700">
+                {ADMIN_STRINGS.signPreviewFolder}:{" "}
+              </span>
+              {previewWithDrive.drive_folder_valid ? (
+                <>
+                  <span className="text-gray-900">
+                    {previewWithDrive.drive_folder_name || driveFolderId}
                   </span>
-                )}
-              </>
-            ) : (
-              <span className="text-red-600">{ADMIN_STRINGS.signPreviewFolderInvalid}</span>
-            )}
-          </div>
+                  {!previewWithDrive.drive_folder_writable && (
+                    <span className="ml-2 text-xs text-red-600">
+                      ({ADMIN_STRINGS.signPreviewFolderNotWritable})
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="text-red-600">
+                  {ADMIN_STRINGS.signPreviewFolderInvalid}
+                </span>
+              )}
+            </div>
+          )}
 
-          {/* Mode summary */}
-          <div className="rounded-md bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-900">
-            {preview.mode_action_summary}
-          </div>
-
-          {/* Rotation breakdown */}
-          {preview.rotation_breakdown.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-gray-700 mb-1">
-                {ADMIN_STRINGS.signPreviewRotation}
-              </p>
-              <table className="w-full text-xs border border-gray-200 rounded overflow-hidden">
-                <tbody className="divide-y divide-gray-100">
-                  {preview.rotation_breakdown.map((entry) => (
-                    <tr key={entry.signature_id} className="bg-white">
-                      <td className="px-3 py-1.5 text-gray-800">{entry.signature_name}</td>
-                      <td className="px-3 py-1.5 text-right font-mono text-gray-700">{entry.count}</td>
-                    </tr>
+          {previewWithRotation &&
+            previewWithRotation.rotation_breakdown.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-700 mb-1">
+                  {ADMIN_STRINGS.signPreviewRotation}
+                </p>
+                <table className="w-full text-xs border border-gray-200 rounded overflow-hidden">
+                  <tbody className="divide-y divide-gray-100">
+                    {previewWithRotation.rotation_breakdown.map((entry) => (
+                     <tr key={entry.signature_id} className="bg-white">
+                       <td className="px-3 py-1.5 text-gray-800">
+                         {entry.signature_name ?? entry.signature_id}
+                       </td>
+                      <td className="px-3 py-1.5 text-right font-mono text-gray-700">
+                       {entry.count}
+                     </td>
+                   </tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Collisions list */}
-          {preview.collisions.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-gray-700 mb-1">
-                Colisiones ({preview.collision_count}
-                {preview.collision_count > 50 ? ", mostrando primeros 50" : ""}):
-              </p>
-              <div className="max-h-32 overflow-y-auto rounded border border-gray-200 bg-gray-50 text-xs font-mono divide-y divide-gray-100">
-                {preview.collisions.map((name) => (
-                  <div key={name} className="px-3 py-1 text-gray-700">
-                    {name}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Override warning */}
-          {mode === "override" && preview.collision_count > 0 && (
-            <div className="rounded-md bg-amber-50 border border-amber-300 px-3 py-2 text-sm text-amber-900">
-              <span className="font-semibold">Advertencia:</span>{" "}
-              {preview.collision_count === 1
-                ? "1 documento será sobreescrito."
-                : `${preview.collision_count} documentos serán sobreescritos.`}{" "}
-              Revise cuidadosamente antes de confirmar.
-            </div>
-          )}
-
-          {/* Skip-all warning */}
-          {mode === "skip_existing" &&
-            preview.file_count > 0 &&
-            preview.collision_count === preview.file_count && (
-              <div className="rounded-md bg-gray-100 border border-gray-300 px-3 py-2 text-sm text-gray-700">
-                Todos los archivos ya existen en el destino y serán omitidos. No hay nada que procesar.
+                  </tbody>
+                </table>
               </div>
             )}
 
@@ -468,14 +520,7 @@ export default function SignModal({
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={
-                isSubmitting ||
-                !preview.drive_folder_valid ||
-                !preview.drive_folder_writable ||
-                (mode === "skip_existing" &&
-                  preview.file_count > 0 &&
-                  preview.collision_count === preview.file_count)
-              }
+              disabled={isSubmitting || !canConfirm}
               className="px-4 py-2 rounded-md bg-[#2c4264] text-sm font-medium text-white hover:bg-[#243652] disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
             >
               {isSubmitting
@@ -532,17 +577,42 @@ export default function SignModal({
 
           {/* Counters */}
           <div className="grid grid-cols-4 gap-2 text-center">
-            <SignCounter label={ADMIN_STRINGS.signTotalFiles} value={job.total_files} />
-            <SignCounter label={ADMIN_STRINGS.signSigned} value={job.signed_count} tone="green" />
-            <SignCounter label={ADMIN_STRINGS.signSkipped} value={job.skipped_count} tone="gray" />
-            <SignCounter label={ADMIN_STRINGS.signErrors} value={job.error_count} tone={job.error_count > 0 ? "red" : "gray"} />
+            <ProgressCounter
+              label={ADMIN_STRINGS.signTotalFiles}
+              value={job.total_files}
+            />
+            <ProgressCounter
+              label={ADMIN_STRINGS.signSigned}
+              value={job.signed_count}
+              tone="green"
+            />
+            <ProgressCounter
+              label={ADMIN_STRINGS.signErrors}
+              value={job.error_count}
+              tone={job.error_count > 0 ? "red" : "gray"}
+            />
           </div>
+
+          {/* ZIP download — caja_local_sign only */}
+          {path === "caja_local_sign" &&
+            job.status === "completed" &&
+            job.output_zip_url && (
+              <a
+                href={job.output_zip_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-md bg-green-700 text-sm font-medium text-white hover:bg-green-800 transition-colors"
+              >
+                {ADMIN_STRINGS.signDownloadZip}
+              </a>
+            )}
 
           {/* Error list */}
           {job.error_details && job.error_details.length > 0 && (
             <div>
               <h3 className="text-sm font-semibold text-gray-900 mb-2">
-                {ADMIN_STRINGS.signErrorListHeading} ({job.error_details.length})
+                {ADMIN_STRINGS.signErrorListHeading} ({job.error_details.length}
+                )
               </h3>
               <div className="max-h-48 overflow-y-auto rounded-md border border-gray-200 bg-gray-50 divide-y divide-gray-200">
                 {job.error_details.map((err, i) => (
@@ -574,30 +644,7 @@ export default function SignModal({
   );
 }
 
-function InfoRow({
-  label,
-  value,
-  tone = "blue",
-}: {
-  label: string;
-  value: string;
-  tone?: "blue" | "green" | "amber" | "red";
-}) {
-  const colors = {
-    blue: "text-[#2c4264]",
-    green: "text-green-700",
-    amber: "text-amber-700",
-    red: "text-red-700",
-  } as const;
-  return (
-    <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
-      <div className={`text-lg font-semibold ${colors[tone]}`}>{value}</div>
-      <div className="text-xs text-gray-500">{label}</div>
-    </div>
-  );
-}
-
-function SignCounter({
+function ProgressCounter({
   label,
   value,
   tone = "blue",

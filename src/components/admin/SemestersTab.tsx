@@ -11,7 +11,7 @@ import {
 import type { SemesterResponse, SemesterStatus } from "@/types/api";
 import NewSemesterModal from "./NewSemesterModal";
 import ImportModal from "./ImportModal";
-import SignModal from "./SignModal";
+import UploadModal from "./UploadModal";
 import ConfirmDialog from "./ConfirmDialog";
 import { showToast } from "./ToastContainer";
 
@@ -76,13 +76,19 @@ export default function SemestersTab() {
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
-      await deleteSemester(deleteTarget.id);
+      const result = await deleteSemester(deleteTarget.id);
       showToast({
         kind: "success",
         message: ADMIN_STRINGS.toastSemesterDeleted,
       });
       setDeleteTarget(null);
       await refresh();
+      if (result.promoted_semester_id) {
+        showToast({
+          kind: "success",
+          message: ADMIN_STRINGS.toastSemesterPromoted(result.promoted_semester_id),
+        });
+      }
     } catch {
       showToast({
         kind: "error",
@@ -227,7 +233,7 @@ export default function SemestersTab() {
         onClose={() => setImportTarget(null)}
         onCompleted={() => void refresh()}
       />
-      <SignModal
+      <UploadModal
         semester={signTarget}
         isOpen={signTarget !== null}
         onClose={() => setSignTarget(null)}
@@ -236,14 +242,30 @@ export default function SemestersTab() {
       <ConfirmDialog
         isOpen={deleteTarget !== null}
         title={ADMIN_STRINGS.confirmDeleteSemesterTitle}
-        message={
-          deleteTarget
-            ? ADMIN_STRINGS.confirmDeleteSemesterMessage(
+        confirmLabel={ADMIN_STRINGS.confirmDeleteSemesterConfirm}
+        message={(() => {
+          if (!deleteTarget) return "";
+          const isActive = deleteTarget.status === "active";
+          if (!isActive) {
+            return ADMIN_STRINGS.confirmDeleteSemesterMessage(
+              deleteTarget.id,
+              deleteTarget.certificate_count,
+            );
+          }
+          const promotionTarget = semesters.find(
+            (s) => s.id !== deleteTarget.id && s.status !== "deleted",
+          );
+          return promotionTarget
+            ? ADMIN_STRINGS.confirmDeleteSemesterActiveWithPreviousMessage(
                 deleteTarget.id,
+                promotionTarget.id,
                 deleteTarget.certificate_count,
               )
-            : ""
-        }
+            : ADMIN_STRINGS.confirmDeleteSemesterActiveNoPreviousMessage(
+                deleteTarget.id,
+                deleteTarget.certificate_count,
+              );
+        })()}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
         isProcessing={isDeleting}

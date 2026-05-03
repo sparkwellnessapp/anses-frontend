@@ -4,14 +4,27 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ADMIN_STRINGS } from "@/lib/adminStrings";
-import { AdminApiError, login } from "@/lib/adminApi";
+import { AdminApiError, forgotPassword, login } from "@/lib/adminApi";
 import { setToken } from "@/lib/auth";
 
 export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [forgotStatus, setForgotStatus] = useState<
+    "idle" | "sending" | "sent" | "error"
+  >("idle");
   const router = useRouter();
+
+  const handleForgotPassword = async () => {
+    setForgotStatus("sending");
+    try {
+      await forgotPassword();
+      setForgotStatus("sent");
+    } catch {
+      setForgotStatus("error");
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,6 +114,29 @@ export default function AdminLoginPage() {
                 ? ADMIN_STRINGS.loginButtonLoading
                 : ADMIN_STRINGS.loginButton}
             </button>
+
+            <div className="mt-3 text-center">
+              {forgotStatus === "sent" ? (
+                <p className="text-xs text-green-700">
+                  {ADMIN_STRINGS.forgotPasswordSent}
+                </p>
+              ) : forgotStatus === "error" ? (
+                <p className="text-xs text-red-600">
+                  {ADMIN_STRINGS.forgotPasswordError}
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  disabled={forgotStatus === "sending" || isSubmitting}
+                  className="text-xs text-[#2c4264] hover:underline disabled:opacity-50"
+                >
+                  {forgotStatus === "sending"
+                    ? ADMIN_STRINGS.forgotPasswordSending
+                    : ADMIN_STRINGS.forgotPasswordLink}
+                </button>
+              )}
+            </div>
           </form>
         </div>
       </main>

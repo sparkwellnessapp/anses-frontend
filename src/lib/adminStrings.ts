@@ -132,8 +132,20 @@ export const ADMIN_STRINGS = {
 
   // Confirm dialogs
   confirmDeleteSemesterTitle: "Eliminar semestre",
+  // Non-active semester: existing behavior, no cascade.
   confirmDeleteSemesterMessage: (id: string, count: number) =>
     `Esta acción eliminará permanentemente el semestre ${id} y sus ${count} certificado(s). No se puede deshacer.`,
+  // Active semester with a previous semester to promote.
+  confirmDeleteSemesterActiveWithPreviousMessage: (
+    deletedId: string,
+    promotedId: string,
+    count: number,
+  ) =>
+    `Al eliminar ${deletedId}, todos sus ${count} certificado(s) serán eliminados permanentemente. El semestre ${promotedId} pasará a ser el semestre actual y todos sus certificados volverán a estar públicamente visibles. Esta acción no se puede deshacer.`,
+  // Active semester with no previous: system will have zero active semesters.
+  confirmDeleteSemesterActiveNoPreviousMessage: (deletedId: string, count: number) =>
+    `Al eliminar ${deletedId}, todos sus ${count} certificado(s) serán eliminados permanentemente. No hay semestre anterior, por lo que el sistema quedará sin semestres activos hasta que se cree uno nuevo. Esta acción no se puede deshacer.`,
+  confirmDeleteSemesterConfirm: "Eliminar permanentemente",
   confirmDeleteCertificateTitle: "Eliminar certificado",
   confirmDeleteCertificateMessage: "¿Eliminar este certificado? No se puede deshacer.",
   confirmBulkDeleteTitle: "Eliminar certificados",
@@ -165,6 +177,7 @@ export const ADMIN_STRINGS = {
   toastSemesterCreateFailed: "No se pudo crear el semestre.",
   toastSemesterDeleted: "Semestre eliminado correctamente.",
   toastSemesterDeleteFailed: "No se pudo eliminar el semestre.",
+  toastSemesterPromoted: (id: string) => `El semestre ${id} es ahora el actual.`,
   toastUploadSuccess: "Certificado subido correctamente.",
   toastUploadFailed: "Error al subir el certificado.",
   toastImportStartFailed: "No se pudo iniciar la importación.",
@@ -196,46 +209,64 @@ export const ADMIN_STRINGS = {
   toastSealUploadFailed: "No se pudo actualizar el sello.",
   invalidPngFile: "El archivo debe ser una imagen PNG.",
 
-  // Sign modal
-  signModalTitle: "Firmar certificados",
-  signFilesLabel: "Archivos PDF a firmar",
-  signFilesHint: "Selecciona uno o más PDFs sin firmar.",
+  // Upload modal (unified — replaces SignModal)
+  uploadModalTitle: "Cargar certificados",
+  uploadPathLabel: "Tipo de carga",
+  uploadPathAnsesSign: "ANSES — Firmar y publicar",
+  uploadPathAnsesSignDesc:
+    "Firma certificados ANSES y los publica en Drive, GCS y la base de datos.",
+  uploadPathCajaPublish: "Caja — Publicar firmados",
+  uploadPathCajaPublishDesc:
+    "Sube certificados Caja ya firmados (sin volver a firmar).",
+  uploadPathCajaLocal: "Caja — Firmar y descargar",
+  uploadPathCajaLocalDesc:
+    "Firma certificados Caja localmente y descarga un ZIP (no se publica en Drive).",
+  uploadPathNextButton: "Continuar",
+
+  // Sign form / preview / progress (reused across all three paths)
+  signFilesLabel: "Archivos PDF",
   signDriveFolderLabel: "ID de carpeta de Drive (destino)",
   signSignaturesLabel: "Firmas a utilizar",
-  signSignaturesHint: "Selecciona al menos una firma para la rotación.",
-  signModeLabel: "Modo de colisión",
-  signModeSkipExisting: "Omitir existentes",
-  signModeSkipExistingHint: "Salta los certificados que ya fueron firmados.",
-  signModeOverride: "Reemplazar",
-  signModeOverrideHint: "Reemplaza GCS, DB y el archivo en Drive.",
-  signModeAppend: "Agregar (sufijo)",
-  signModeAppendHint: "Actualiza GCS y DB; sube un nuevo archivo Drive con sufijo (N+1).",
   signPreviewButton: "Continuar",
   signPreviewing: "Cargando previsualización...",
-  signPreviewTitle: "Previsualización",
-  signPreviewFiles: (n: number) => `${n} archivo(s) válido(s)`,
   signPreviewFolder: "Carpeta Drive",
   signPreviewFolderInvalid: "No accesible",
   signPreviewFolderNotWritable: "Sin permisos de escritura",
-  signPreviewCollisions: (n: number) => `${n} colisión(es)`,
   signPreviewRotation: "Distribución de firmas",
-  signPreviewMode: "Acción",
   signBackButton: "Volver",
-  signConfirmButton: "Confirmar y firmar",
+  signConfirmButton: "Confirmar",
   signSubmitting: "Iniciando...",
-  signJobInProgress: "Firma en curso",
-  signJobCompleted: "Firma completada",
-  signJobFailed: "Firma fallida",
+  signJobInProgress: "En curso",
+  signJobCompleted: "Completado",
+  signJobFailed: "Fallido",
   signJobPending: "Pendiente",
   signTotalFiles: "Total",
-  signSigned: "Firmados",
+  signSigned: "Procesados",
   signSkipped: "Omitidos",
   signErrors: "Errores",
   signErrorListHeading: "Errores",
   signCloseButton: "Cerrar",
-  toastSignJobStartFailed: "No se pudo iniciar la firma.",
+  signDownloadZip: "Descargar ZIP",
+  toastSignJobStartFailed: "No se pudo iniciar la operación.",
   toastSignPreviewFailed: "No se pudo obtener la previsualización.",
-  signNoSignaturesAvailable: "No hay firmas disponibles. Sube una en la pestaña Firmas.",
+  signNoSignaturesAvailable:
+    "No hay firmas disponibles. Sube una en la pestaña Firmas.",
+
+  // Password reset
+  forgotPasswordLink: "¿Olvidé mi contraseña?",
+  forgotPasswordSending: "Enviando...",
+  forgotPasswordSent:
+    "Se envió un enlace de restablecimiento al correo del administrador.",
+  forgotPasswordError: "No se pudo enviar el correo. Reintenta.",
+  resetPasswordTitle: "Restablecer contraseña",
+  resetPasswordNewLabel: "Nueva contraseña",
+  resetPasswordConfirmLabel: "Confirmar contraseña",
+  resetPasswordSubmit: "Cambiar contraseña",
+  resetPasswordSubmitting: "Guardando...",
+  resetPasswordSuccess: "Contraseña actualizada correctamente.",
+  resetPasswordInvalidToken:
+    "El enlace es inválido, ha expirado o ya fue usado.",
+  resetPasswordMismatch: "Las contraseñas no coinciden.",
 } as const;
 
 export type AdminStringKey = keyof typeof ADMIN_STRINGS;

@@ -42,6 +42,8 @@ const dictionary = {
     errorMessage:
       "No pudimos completar la consulta. Por favor intente nuevamente en unos minutos.",
     errorInvalidDni: "El DNI ingresado no es válido. Verifique el número.",
+    pageExpiryNotice:
+      "Su certificado estara disponible para descarga por un plazo maximo de noventa dias.",
   },
   en: {
     headerTitle: "Consulate General in Tel Aviv",
@@ -73,6 +75,8 @@ const dictionary = {
     errorMessage:
       "We could not complete the lookup. Please try again in a few minutes.",
     errorInvalidDni: "The DNI entered is not valid. Please verify the number.",
+    pageExpiryNotice:
+      "Your certificate will be available for download for a maximum period of ninety days.",
   },
 } as const;
 

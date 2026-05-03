@@ -20,13 +20,16 @@ import type {
   AdminDownloadResponse,
   BulkResponse,
   BulkVisibilityRequest,
+  CajaSignPreviewResponse,
   CertificateResponse,
   CertificateUpdate,
   ImportJobResponse,
   ImportTriggerRequest,
   LoginRequest,
+  PublishPreviewResponse,
   SealResponse,
   SemesterCreate,
+  SemesterDeleteResponse,
   SemesterResponse,
   SemesterUpdate,
   SignJobPreviewResponse,
@@ -137,6 +140,24 @@ export async function verifyToken(): Promise<void> {
   await request<void>("/api/auth/verify", { method: "POST" });
 }
 
+export async function forgotPassword(): Promise<void> {
+  await request<unknown>("/api/auth/forgot-password", {
+    method: "POST",
+    skipAuth: true,
+  });
+}
+
+export async function resetPassword(
+  token: string,
+  newPassword: string,
+): Promise<void> {
+  await request<unknown>("/api/auth/reset-password", {
+    method: "POST",
+    body: { token, new_password: newPassword },
+    skipAuth: true,
+  });
+}
+
 // ---------- Semesters ----------
 
 export function listSemesters(): Promise<SemesterResponse[]> {
@@ -162,8 +183,8 @@ export function patchSemester(
   });
 }
 
-export function deleteSemester(id: string): Promise<void> {
-  return request<void>(`/api/admin/semesters/${id}`, { method: "DELETE" });
+export function deleteSemester(id: string): Promise<SemesterDeleteResponse> {
+  return request<SemesterDeleteResponse>(`/api/admin/semesters/${id}`, { method: "DELETE" });
 }
 
 // ---------- Imports ----------
@@ -318,5 +339,49 @@ export function listSignJobsForSemester(
 ): Promise<SignJobResponse[]> {
   return request<SignJobResponse[]>(
     `/api/admin/semesters/${semesterId}/sign-jobs`,
+  );
+}
+
+// ---------- Caja sign (local) ----------
+
+export function previewCajaSignJob(
+  semesterId: string,
+  formData: FormData,
+): Promise<CajaSignPreviewResponse> {
+  return request<CajaSignPreviewResponse>(
+    `/api/admin/semesters/${semesterId}/caja-sign/preview`,
+    { method: "POST", formData },
+  );
+}
+
+export function submitCajaSignJob(
+  semesterId: string,
+  formData: FormData,
+): Promise<SignJobResponse> {
+  return request<SignJobResponse>(
+    `/api/admin/semesters/${semesterId}/caja-sign`,
+    { method: "POST", formData },
+  );
+}
+
+// ---------- Caja publish ----------
+
+export function previewPublishJob(
+  semesterId: string,
+  formData: FormData,
+): Promise<PublishPreviewResponse> {
+  return request<PublishPreviewResponse>(
+    `/api/admin/semesters/${semesterId}/publish/preview`,
+    { method: "POST", formData },
+  );
+}
+
+export function submitPublishJob(
+  semesterId: string,
+  formData: FormData,
+): Promise<SignJobResponse> {
+  return request<SignJobResponse>(
+    `/api/admin/semesters/${semesterId}/publish`,
+    { method: "POST", formData },
   );
 }
