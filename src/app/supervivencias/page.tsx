@@ -38,7 +38,7 @@ type LookupStatus =
   | { kind: "empty" }
   | { kind: "error" };
 
-export default function CertificadosPage() {
+export default function SupervivenciasPage() {
   const [locale, setLocale] = useState<Locale>(DEFAULT_LOCALE);
   const [status, setStatus] = useState<LookupStatus>({ kind: "idle" });
   const [inlineError, setInlineError] = useState<string | null>(null);
